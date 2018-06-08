@@ -5,6 +5,7 @@
 
 require(rstan)
 require(devtools)
+require(assertthat)
 
 ################################################################################
 
@@ -33,16 +34,31 @@ rdirichlet <- function(n, alpha, allowZero=FALSE) {
   }
 }
 
+# rankins are all 1 based, eg. 1,2,3,4 or 1,2,3
+expandRanking <- function(ranks, maxrank)
+{
+  m <- max(ranks, na.rm = TRUE) - 1
+  assertthat::assert_that(maxrank >= m + 1, msg = "maxrank must be greater than the maximum of ranks")
+  return((ranks - 1)*(maxrank - 1)/m + 1)
+}
+expandRanking(1:4, 5)
+expandRanking(c(1,NA,2,NA,3,NA), 9)
+tryCatch(expandRanking(1:4, 3), error = function(e) "success")
+
 ################################################################################
 # Global Parameters
 
 set.seed(10904)
+# people taking the survey 
 N <- 11
+# options per question
 M <- 10
+# desired ranking for testing
 desiredRanking <- M:1
+# the NA value to be used in the stan program.  stan does not have an NA
 stan_na <- -9999.0
 
-#####################
+###############################################################################
 # create Example Data
 
 X <- rdirichlet(N, desiredRanking)
