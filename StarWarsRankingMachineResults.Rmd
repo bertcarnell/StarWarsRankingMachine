@@ -1,0 +1,33 @@
+---
+title: "StarWarsRankingMachineResults"
+author: "Rob Carnell"
+date: "June 19, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+stopifnot(require(assertthat))
+
+currSys <- tolower(Sys.info()["sysname"])
+
+if (currSys == "linux")
+{
+  repository_path <- file.path("~","repositories","StarWarsRankingMachine")
+} else
+{
+  repository_path <- file.path("C:","Users","Rob","Documents","Repositories",
+                               "StarWarsRankingMachine")
+}
+tmp <- assertthat::assert_that(dir.exists(repository_path))
+load(file=file.path(repository_path, "RawData.Rdata"))
+```
+
+## Survey
+
+The results presented here are the output of this survey:  https://www.surveymonkey.com/r/C9SMVYV
+
+## Data Analysis
+
+TBD.  Describe the methodology.
+
+

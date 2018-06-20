@@ -1,6 +1,10 @@
+# Copyright 2018 Rob Carnell
+rm(list=ls())
+
 stopifnot(require(assertthat))
-#tmp <- assertthat::assert_that(require(rvest))
 tmp <- assertthat::assert_that(require(RSelenium))
+tmp <- assertthat::assert_that(require(magrittr))
+tmp <- assertthat::assert_that(require(rvest))
 
 currSys <- tolower(Sys.info()["sysname"])
 
@@ -29,245 +33,138 @@ if (currSys != "linux")
   passwd_str <- ""
 }
 
-###############################################################################
+rD <- rsDriver()
+remDr <- rD[["client"]]
 
-queryForArticleType <- function(type, html_doc, date, html_article_vector, link_vector)
+#######
+# login
+remDr$navigate(paste0(url, "user/sign-in"))
+elem <- remDr$findElement(using="id", value="username")
+elem$sendKeysToElement(list('bertcarnell'))
+
+elem <- remDr$findElement(using="id", value="password")
+elem$sendKeysToElement(list(passwd_str))
+elem <- remDr$findElement(using="class", value="wds-button")
+elem$clickElement()
+
+remDr$navigate(paste0(url, "analyze/86jkOYoEheqIAGUISYfWrC8GF1x4TttJjKrc8B3C4Ysw54ujZcW6on00eLZagCgg"))
+
+Sys.sleep(5)
+elem <- remDr$findElement(using="id", value="mode_tab_individual_responses")
+elem$clickElement()
+
+Sys.sleep(5)
+responseList <- list()
+#responseList[[16]] <- remDr$getPageSource()
+elem <- remDr$findElement(using="class", value="analyze-pages-content-wrapper")
+responseList[[16]] <- elem$getPageSource()
+
+m <- regexpr("RESPONDENTS: [1-9][0-9]* of [1-9][0-9]*", responseList[[16]])
+nResponders <- as.numeric(substring(responseList[[16]], 
+                                    m + attr(m, "match.length") -2, m + attr(m, "match.length")-1))
+m <- regexpr("Respondent [#]", responseList[[16]])
+currResponder <- as.numeric(trimws(substring(responseList[[16]], m + attr(m, "match.length"), m + attr(m, "match.length")+2)))
+assertthat::assert_that(currResponder == 16)
+
+for (i in (nResponders-1):1)
 {
-  temp_ho <- html_nodes(html_doc, paste0("span.field-content :contains('",type,"')")) %>% 
-    html_attr("href")
-  if (length(temp_ho) > 0)
-  {
-    temp_html <- paste0('<a href="https://www.genealogybank.com', temp_ho, '">', date, '</a>')
-    links <- c(link_vector, paste0("https://www.genealogybank.com", temp_ho))
-    results <- c(html_article_vector, temp_html)
-    return(list(results=results, bfound=TRUE, links=links))
-  } else
-  {
-    return(list(results=html_article_vector, bfound=FALSE, links=link_vector))
-  }
-}
-
-queryAdler <- function(article_type, sDateStart, sDateEnd, query_output_file, login_session)
-{
-  dateToSearchMin <- as.Date(sDateStart)
-  dateToSearchMax <- as.Date(sDateEnd)
-  
-  tuesdays <- findTuesdays(dateToSearchMin, dateToSearchMax)
-  print(paste0("Querying for ", length(tuesdays$tuesdays), " days"))
-  results <- character()
-  links <- character()
-  for (i in seq_along(tuesdays$html_tuesdays))
-  {
-    print(tuesdays$tuesdays[i])
-    query1 <- paste0("https://www.genealogybank.com/explore/newspapers/all/usa/pennsylvania/reading/reading-adler",
-                     "?fname=",
-                     "&lname=",
-                     "&fullname=",
-                     "&rgfromDate=", tuesdays$html_tuesdays[i],
-                     "&rgtoDate=", tuesdays$html_tuesdays[i],
-                     "&formDate=",
-                     "&formDateFlex=exact",
-                     "&dateType=range",
-                     "&kwinc=",
-                     "&kwexc=")
-    test <- TRUE  
-    while (test)
-    {
-      tryCatch(expr = {
-        page1_session <- jump_to(login_session, query1)
-        page1_html <- read_html(page1_session)
-      }, error = function(e) {print("Error with query"); return(links)})
-      if (article_type == "Obit")
-      {
-        temp <- queryForArticleType("Historical Obituary", page1_html, tuesdays$tuesdays[i], 
-                                    results, links)
-        results <- temp$results
-        bfound <- temp$bfound
-        links <- temp$links
-        temp <- queryForArticleType("Mortuary Notice", page1_html, tuesdays$tuesdays[i], 
-                                    results, links)
-        results <- temp$results
-        links <- temp$links
-        bfound <- bfound | temp$bfound
-      }
-      else if (article_type == "Marriage")
-      {
-        temp <- queryForArticleType("Matrimony Notice", page1_html, tuesdays$tuesdays[i], 
-                                    results, links)
-        results <- temp$results
-        links <- temp$links
-        bfound <- temp$bfound
-        temp <- queryForArticleType("Marriage/Engagement Notice", page1_html, tuesdays$tuesdays[i], 
-                                    results, links)
-        results <- temp$results
-        links <- temp$links
-        bfound <- bfound | temp$bfound
-      } else
-      {
-        stop("Article type not recognized")
-      }
-      
-      # go to the next page if nothing was found
-      if (!bfound)
-      {
-        temp_next <- html_nodes(page1_html, "li.page-item.page-next") %>% html_children() %>% 
-          html_attr("href")
-        if (length(temp_next) == 1)
-        {
-          test <- TRUE
-          query1 <- paste0("https://www.genealogybank.com", temp_next)
-          print("Next Page")
-        } else if (length(temp_next) == 0)
-        {
-          test <- FALSE
-        } else
-        {
-          stop("error unknown")
-        }
-      } else
-      {
-        test <- FALSE
-      }
-    }
-  }
-  
-  if (length(results) > 0)
-  {
-    results_html <- read_html(paste("<p>", paste(results, collapse="</p><p>"), "</p>"))
-    write_html(results_html, query_output_file, options = "format")
-  } else
-  {
-    stop("No Results Found")
-  }
-  return(links)
-}
-
-
-###############################################################################
-
-pgsession <- html_session(url)
-pgsession <- follow_link(pgsession, "LOG IN")
-
-pgform <- html_form(pgsession)[[1]] 
-
-filled_form <- set_values(pgform,
-                          `username` = "bertcarnell", 
-                          `password` = passwd_str)
-
-pg_session_logged_in <- submit_form(pgsession, filled_form, submit = '<unnamed>')
-
-page1_html <- read_html(pgsession)
-
-html_nodes(page1_html, "a.log-in.simplified_and_signup.static-buttons")
-
-temp_ho <- html_nodes(html_doc, paste0("span.field-content :contains('",type,"')")) %>% 
-  html_attr("href")
-pgform <- html_form(pgsession)[[1]] 
-
-filled_form <- set_values(pgform,
-                          `username` = "bertcarnell@gmail.com", 
-                          `password` = passwd_str)
-
-pg_session_logged_in <- submit_form(pgsession, filled_form)
-
-
-  filled_form <- set_values(pgform,
-                            `username` = "bertcarnell@gmail.com", 
-                            `password` = passwd_str)
-  
-  pg_session_logged_in <- submit_form(pgsession, filled_form)
-  
-  #links <- queryAdler("Obit", "1796-11-29", "1798-01-01", output_file, pg_session_logged_in)
-  #links <- queryAdler("Obit", "1798-01-01", "1810-01-01", output_file, pg_session_logged_in)
-  
-  #marriage_links <- queryAdler("Marriage", "1796-11-29", "1798-01-01", output_file_marriage, 
-  #                             pg_session_logged_in)
-  #marriage_links <- queryAdler("Marriage", "1798-01-01", "1810-01-01", output_file_marriage, 
-  #                             pg_session_logged_in)
-  
-  #save(links, marriage_links, file = file.path(output_dir, "links1798.Rdata"))
-  #save(links, marriage_links, file = file.path(output_dir, "links1810.Rdata"))
-  #load(file = file.path(output_dir, "links1798.Rdata"))
-  #load(file = file.path(output_dir, "links1810.Rdata"))
-  
-  if (opt$article_type == "obit")
-  {
-    links <- queryAdler("Obit", opt$start_date, opt$end_date, output_file, pg_session_logged_in)
-  } else if (opt$article_type == "marriage")
-  {
-    links <- queryAdler("Marriage", opt$start_date, opt$end_date, output_file, pg_session_logged_in)
-  } else
-  {
-    stop("Article Type Not Recognized")
-  }
-  save(links, file = output_save_file)
-}
-
-if (opt$get_image)
-{
-  load(file = output_save_file)
-  remDr <- RSelenium::remoteDriver(remoteServerAddr = "localhost",
-                                   port = 4444L,
-                                   browserName = "chrome")
-  driver_stats <- remDr$open()
-  assertthat::assert_that(tolower(driver_stats$browserName) == "chrome")
-  
-  #######
-  # login
-  remDr$navigate(url)
-  elem <- remDr$findElement(using="id", value="dropdowntoggle-login")
+  #i <- 13
+  elem <- remDr$findElement(using="class", value="wds-button--arrow-left")
   elem$clickElement()
-  elem <- remDr$findElement(using="id", value="username")
-  elem$sendKeysToElement(list('bertcarnell@gmail.com'))
-  
-  elem <- remDr$findElement(using="id", value="password")
-  elem$sendKeysToElement(list(passwd_str))
-  elem <- remDr$findElement(using="id", value="btnLogin")
-  elem$clickElement()
-  
-  for (i in 1:length(links))
-  {
-    print(paste0(i, ": ", links[i]))
-    print("Downloading...")
-    tryCatch({
-      if (opt$article_type == "obit")
-      {
-        remDr <- getArticleImage(remDr, links[i], "Obituary")
-      } else if (opt$article_type == "marriage")
-      {
-        remDr <- getArticleImage(remDr, links[i], "Marriage")
-      } else
-      {
-        stop("Article Type Not Recognized")
-      }
-    }, error = function(e){
-      print(e)
-      cat("trying again...\n")
-      Sys.sleep(5)
-      if (opt$article_type == "obit")
-      {
-        remDr <- getArticleImage(remDr, links[i], "Obituary")
-      } else if (opt$article_type == "marriage")
-      {
-        remDr <- getArticleImage(remDr, links[i], "Marriage")
-      } else
-      {
-        stop("Article Type Not Recognized")
-      }
-    })
-  }
-  
-  remDr$close()
+  Sys.sleep(2)
+  #responseList[[i]] <- remDr$getPageSource()
+  elem <- remDr$findElement(using="class", value="analyze-pages-content-wrapper")
+  responseList[[i]] <- elem$getPageSource()
+  currResponder <- as.numeric(trimws(substring(responseList[[i]], m + attr(m, "match.length"), m + attr(m, "match.length")+2)))
+  assertthat::assert_that(i == currResponder)
 }
 
+# go back to the default
+for (i in 2:nResponders)
+{
+  elem <- remDr$findElement(using="class", value="wds-button--arrow-right")
+  elem$clickElement()
+}
 
-ClientID
-NPnyNc7_TN-G3kRwP7ilvw
+# get question labels before iterating through questions
+questionList <- vector("list", 10)
+temp1 <- responseList %>% extract2(16) %>% extract2(1) %>% read_html()
+metatemp <- temp1 %>% html_nodes("ul.respondent-info-fields") %>% extract(1) %>%
+  html_nodes("span.value")
+tempQuestionResponse <- temp1 %>% html_nodes("div.response-question-list") %>% extract(1)
+# ensure there are 10 questions
+assertthat::assert_that(length(tempQuestionResponse %>% html_nodes("div.question-title")) == 10)
+tempQuestionResponse2 <- tempQuestionResponse %>% html_children()
 
-Secret
-8642895571115613401048677272393412540
+questionList[[1]] <- tempQuestionResponse2 %>% extract(1) %>% 
+  html_nodes("div.response-question-title-text") %>% html_text() %>% trimws()
+questionList[[2]] <- tempQuestionResponse2 %>% extract(2) %>% 
+  html_nodes("div.response-question-title-text") %>% html_text() %>% trimws()
+for (j in 3:10)
+{
+  questionList[[j]] <- tempQuestionResponse2 %>% extract(j) %>% 
+    html_nodes("div.response-container.matrix-rating") %>%
+    html_children() %>% html_children %>% html_nodes("span.response-text-label") %>%
+    html_text() %>% trimws()
+}
 
-Access Token
-FEk40QGlfQuAYxU5PtnZhq-nSuC9WpOuNPb5vOS1TPt8ekJHiHdSXCnyIW75Y6VTfCv1uAi1XEBq5976RY9fCclRYAWZIrIpv4O6Ab3JUmCMCfj3nb3k9bP22LFT6w.7
+questionResponseList <- vector("list", nResponders)
+for (i in 1:nResponders)
+{
+  # i <- 1
+  questionResponseList[[i]]$data <- vector("list", 10)
+  
+  extractnum <- ifelse(i == 1, 1, 2)
 
+  temp1 <- responseList %>% extract2(i) %>% extract2(1) %>% read_html()
+  metatemp <- temp1 %>% html_nodes("ul.respondent-info-fields") %>% extract(extractnum) %>%
+    html_nodes("span.value")
+  tempQuestionResponse <- temp1 %>% html_nodes("div.response-question-list") %>% extract(extractnum)
+  # ensure there are 10 questions
+  assertthat::assert_that(length(tempQuestionResponse %>% html_nodes("div.question-title")) == 10)
+  tempQuestionResponse2 <- tempQuestionResponse %>% html_children()
+  
+  # get the metadata about the respondent
+  meta <- list()
+  meta$Collector <- metatemp %>% extract(1) %>% html_text %>% trimws()
+  meta$Start <- metatemp %>% extract(3) %>% html_text %>% trimws()
+  meta$Stop <- metatemp %>% extract(4) %>% html_text %>% trimws()
+  meta$Duration <- metatemp %>% extract(5) %>% html_text %>% trimws()
+  meta$IP <- metatemp %>% extract(6) %>% html_text %>% trimws()
+  questionResponseList[[i]]$meta <- meta
+  
+  # get answer 1 + 2
+  questionResponseList[[i]]$data[[1]] <- tempQuestionResponse2 %>% 
+    extract(1) %>% html_nodes("span.response-text") %>%
+    html_text() %>% trimws()
+  questionResponseList[[i]]$data[[2]] <- tempQuestionResponse2 %>% 
+    extract(2) %>% html_nodes("span.response-text") %>%
+    html_text() %>% trimws()
+  
+  # get answer 3 - 10
+  for (j in 3:10)
+  {
+    questionResponseList[[i]]$data[[j]] <- tempQuestionResponse2 %>% 
+      extract(j) %>% html_nodes("div.response-container.matrix-rating") %>%
+      html_children() %>% html_children %>% html_nodes("div.response-text") %>% 
+      html_nodes("span") %>% html_text() %>% trimws()
+  }
+}
 
+save(responseList, questionList, questionResponseList, 
+     file=file.path(repository_path, "RawData.Rdata"))
+
+q1 <- sapply(questionResponseList, function(x) x$data[[1]])
+table(q1)
+q2 <- sapply(questionResponseList, function(x) x$data[[2]])
+mean(as.numeric(q2))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[3]])))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[4]])))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[5]])))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[6]])))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[7]])))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[8]])))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[9]])))
+suppressWarnings(sapply(questionResponseList, function(x) as.numeric(x$data[[10]])))
+
+                        
