@@ -5,8 +5,10 @@ date: "June 19, 2018"
 output: html_document
 ---
 
-```{r setup, include=FALSE, echo=FALSE}
+```{r setup, include=FALSE, echo=FALSE, message=FALSE}
 stopifnot(require(assertthat))
+assertthat::assert_that(require(ggplot2))
+assertthat::assert_that(require(rstan))
 
 currSys <- tolower(Sys.info()["sysname"])
 
@@ -20,6 +22,40 @@ if (currSys == "linux")
 }
 tmp <- assertthat::assert_that(dir.exists(repository_path))
 load(file=file.path(repository_path, "RawData.Rdata"))
+load(file=file.path(repository_path, "RawFits.Rdata"))
+
+# rankins are all 1 based, eg. 1,2,3,4 or 1,2,3
+expandRanking <- function(ranks, maxrank)
+{
+  m <- max(ranks, na.rm = TRUE) - 1
+  assertthat::assert_that(maxrank >= m + 1, 
+                          msg = "maxrank must be greater than the maximum of ranks")
+  if (maxrank == m + 1) return(ranks)  
+  return((ranks - 1)*(maxrank - 1)/m + 1)
+}
+if (FALSE)
+{
+  expandRanking(1:4, 5)
+  expandRanking(c(1,NA,2,NA,3,NA), 9)
+  tryCatch(expandRanking(1:4, 3), error = function(e) "success")
+  expandRanking(1:4, 4)
+}
+
+extractMatrix <- function(x, position, optionLabels)
+{
+  # NA's induced by corercion
+  temp <- suppressWarnings(sapply(x, function(x) as.numeric(x$data[[position]]), USE.NAMES=FALSE))
+  plottemp <- data.frame(option=factor(1:nrow(temp), labels=substring(optionLabels,1,15)), 
+                    person=factor(rep(1:ncol(temp), each=nrow(temp))), 
+                    Ranking=c(temp))
+  tempMeans <- apply(temp, 1, mean, na.rm=TRUE)
+  tempExandedMeans <- apply(temp, 2, function(x){
+    expandRanking(x, maxrank=max(temp, na.rm=TRUE))
+  })
+  tempExandedMeans <- apply(tempExandedMeans, 1, mean, na.rm=TRUE)
+  return(list(mat=temp, plotframe=plottemp, mean=tempMeans, expandedMean=tempExandedMeans))
+}
+
 ```
 
 ## Survey
@@ -30,4 +66,73 @@ The results presented here are the output of this survey:  https://www.surveymon
 
 TBD.  Describe the methodology.
 
+## Results
 
+### Demographics
+
+Genders:
+
+```{r echo=FALSE}
+q1 <- sapply(questionResponseList, function(x) x$data[[1]], USE.NAMES=FALSE)
+q2 <- sapply(questionResponseList, function(x) x$data[[2]], USE.NAMES=FALSE)
+table(q1)
+```
+
+Mean age: `r mean(q2)`
+
+```{r echo=FALSE}
+ggplot(data.frame(gender=q1, age=as.numeric(q2)), aes(x=gender, y=age, col=gender)) + 
+  geom_point() + 
+  geom_jitter(width=0.2) + 
+  theme_bw() + theme(legend.position="none") +
+  xlab("") +
+  ylab("Age (yr)")
+```
+
+## Results
+
+```{r echo=FALSE}
+nChains <- 3
+methodOptions <- c("Mean","ExpandedMean","Bayesian","SimAnnealing")
+for (j in 3:10)
+{
+  qj <- extractMatrix(questionResponseList, j, questionList[[j]])
+  ggplot(qj$plotframe, aes(x=person, y=option, fill=Ranking)) + 
+    geom_tile() +
+    scale_fill_distiller() + 
+    xlab("Responder") + 
+    ylab("")
+  ord <- order(sannFits[[j]]$par, decreasing=TRUE)
+  M <- nrow(qj$mat)
+  plotData <- data.frame(method=rep(methodOptions, each=M),
+                         option=factor(rep(questionList[[j]], times=length(methodOptions)),
+                                       levels=questionList[[j]][ord],
+                                       labels=substring(questionList[[j]][ord], 1, 15)),
+                         value=c(qj$mean, 
+                                 qj$expandedMean,
+                                 get_posterior_mean(fits[[j]])[1:M,nChains+1]*M,
+                                 sannFits[[j]]$par),
+                         rankValue=c(rank(qj$mean), 
+                                 rank(qj$expandedMean),
+                                 rank(get_posterior_mean(fits[[j]])[1:M,nChains+1]),
+                                 sannFits[[j]]$par)
+                         )
+  
+  g1 <- ggplot(plotData, aes(x=option, y=value, group=method, fill=method)) +
+    geom_col() +
+    facet_wrap("method", nrow=2, ncol=2) +
+    coord_flip() +
+    theme(legend.position="none") +
+    ylab("") +
+    xlab("Value")
+  plot(g1)
+  
+  g2 <- ggplot(plotData, aes(x=option, y=rankValue, group=method, col=method, fill=method)) +
+    geom_col(position="dodge") +
+    coord_flip() +
+    ylab("") +
+    xlab("Ranking")
+  plot(g2)
+}
+
+```
