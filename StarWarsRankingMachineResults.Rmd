@@ -75,14 +75,16 @@ Genders:
 ```{r echo=FALSE}
 q1 <- sapply(questionResponseList, function(x) x$data[[1]], USE.NAMES=FALSE)
 q2 <- sapply(questionResponseList, function(x) x$data[[2]], USE.NAMES=FALSE)
-table(q1)
 ```
+|Female|Male|
+|:----:|:--:|
+|`r length(which(tolower(q1) == "female"))`|`r length(which(tolower(q1) == "male"))`|
 
-Mean age: `r mean(q2)`
+Mean age: `r mean(q2, na.rm=TRUE)`
 
 ```{r echo=FALSE}
 ggplot(data.frame(gender=q1, age=as.numeric(q2)), aes(x=gender, y=age, col=gender)) + 
-  geom_point() + 
+  geom_point(size=3) + 
   geom_jitter(width=0.2) + 
   theme_bw() + theme(legend.position="none") +
   xlab("") +
@@ -96,12 +98,14 @@ nChains <- 3
 methodOptions <- c("Mean","ExpandedMean","Bayesian","SimAnnealing")
 for (j in 3:10)
 {
+  print(paste0("Question ", j))
   qj <- extractMatrix(questionResponseList, j, questionList[[j]])
-  ggplot(qj$plotframe, aes(x=person, y=option, fill=Ranking)) + 
+  g3 <- ggplot(qj$plotframe, aes(x=person, y=option, fill=Ranking)) + 
     geom_tile() +
     scale_fill_distiller() + 
     xlab("Responder") + 
     ylab("")
+  plot(g3)
   ord <- order(sannFits[[j]]$par, decreasing=TRUE)
   M <- nrow(qj$mat)
   plotData <- data.frame(method=rep(methodOptions, each=M),
@@ -123,15 +127,15 @@ for (j in 3:10)
     facet_wrap("method", nrow=2, ncol=2) +
     coord_flip() +
     theme(legend.position="none") +
-    ylab("") +
-    xlab("Value")
+    ylab("Value") +
+    xlab("")
   plot(g1)
   
   g2 <- ggplot(plotData, aes(x=option, y=rankValue, group=method, col=method, fill=method)) +
     geom_col(position="dodge") +
     coord_flip() +
-    ylab("") +
-    xlab("Ranking")
+    ylab("Ranking") +
+    xlab("")
   plot(g2)
 }
 
