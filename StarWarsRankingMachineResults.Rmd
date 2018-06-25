@@ -93,12 +93,13 @@ ggplot(data.frame(gender=q1, age=as.numeric(q2)), aes(x=gender, y=age, col=gende
 
 ## Results
 
-```{r echo=FALSE}
+```{r plotResults,echo=FALSE,message=FALSE,results="asis"}
 nChains <- 3
 methodOptions <- c("Mean","ExpandedMean","Bayesian","SimAnnealing")
 for (j in 3:10)
 {
-  print(paste0("Question ", j))
+  # Note:  need two spaces in from of the \n
+  cat(paste0("  \n### Question ", j, "\n"))
   qj <- extractMatrix(questionResponseList, j, questionList[[j]])
   g3 <- ggplot(qj$plotframe, aes(x=person, y=option, fill=Ranking)) + 
     geom_tile() +
