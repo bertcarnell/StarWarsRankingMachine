@@ -181,8 +181,20 @@ for (i in 3:10)
 {
   qi <- extractMatrix(questionResponseList, i, NA)
 
-  sannFits[[i]] <- optim(par = 1:nrow(qi), fn = cLikFuncMat, gr = cGenerateNewTheta, 
-             dat = qi, method = "SANN", control = list(fnscale = -1))
+  o1 <- optim(par = 1:nrow(qi), fn = cLikFuncMat, gr = cGenerateNewTheta, 
+              dat = qi, method = "SANN", control = list(fnscale = -1))
+  o2 <- optim(par = nrow(qi):1, fn = cLikFuncMat, gr = cGenerateNewTheta, 
+              dat = qi, method = "SANN", control = list(fnscale = -1))
+  o3 <- optim(par = sample(1:nrow(qi), size=nrow(qi), replace=FALSE), 
+              fn = cLikFuncMat, gr = cGenerateNewTheta, 
+              dat = qi, method = "SANN", control = list(fnscale = -1))
+  o4 <- optim(par = sample(1:nrow(qi), size=nrow(qi), replace=FALSE), 
+              fn = cLikFuncMat, gr = cGenerateNewTheta, 
+              dat = qi, method = "SANN", control = list(fnscale = -1))
+  
+  #sannFits[[i]] <- optim(par = 1:nrow(qi), fn = cLikFuncMat, gr = cGenerateNewTheta, 
+  #           dat = qi, method = "SANN", control = list(fnscale = -1))
+  sannFits[[i]] <- list(par=rank(apply(rbind(o1$par, o2$par, o3$par, o4$par), 2, mean)))
   print(paste0("Sann Fit ", i, " complete"))
 }
 

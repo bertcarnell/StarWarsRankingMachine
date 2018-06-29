@@ -80,12 +80,12 @@ q2 <- sapply(questionResponseList, function(x) x$data[[2]], USE.NAMES=FALSE)
 |:----:|:--:|
 |`r length(which(tolower(q1) == "female"))`|`r length(which(tolower(q1) == "male"))`|
 
-Mean age: `r mean(q2, na.rm=TRUE)`
+Mean age: `r mean(as.numeric(q2), na.rm=TRUE)`
 
 ```{r echo=FALSE}
 ggplot(data.frame(gender=q1, age=as.numeric(q2)), aes(x=gender, y=age, col=gender)) + 
   geom_point(size=3) + 
-  geom_jitter(width=0.2) + 
+  geom_jitter(width=0.2, size=3) + 
   theme_bw() + theme(legend.position="none") +
   xlab("") +
   ylab("Age (yr)")
@@ -99,7 +99,7 @@ methodOptions <- c("Mean","ExpandedMean","Bayesian","SimAnnealing")
 for (j in 3:10)
 {
   # Note:  need two spaces in from of the \n
-  cat(paste0("  \n### Question ", j, "\n\n"))
+  cat(paste0("  \n\n### Question ", j, "\n\n\n"))
   qj <- extractMatrix(questionResponseList, j, questionList[[j]])
   g3 <- ggplot(qj$plotframe, aes(x=person, y=option, fill=Ranking)) + 
     geom_tile() +
